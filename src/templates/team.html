@@ -19,10 +19,10 @@
   {{ 'Members'|trans }}: {{ teamsStats.active_users_count }} &ndash; {% trans %}Experiment{% plural teamsStats.totxp %}Experiments{% endtrans %}: {{ teamsStats.totxp }} ({{ teamsStats.totxpts }} timestamped) &ndash; {{ 'Resources'|trans }}: {{ teamsStats.totdb }}
   </div>
 
-  <h3 class='p-2 pl-3 mb-3 section-title'>{{ 'Members'|trans }}</h3>
+  <h3 id='memberSectionTitle' class='p-2 pl-3 mb-3 section-title'>{{ 'Members'|trans }}</h3>
   {% include 'filter-input-snippet.html' with {'target': 'teamTable'} %}
   <div class='table-container'>
-    <table class='table' aria-describedby='pageTitle' data-table-sort='true'>
+    <table class='table' aria-labelledby='memberSectionTitle' data-table-sort='true'>
       <thead>
         <tr>
             <th scope='col'>{{ 'Name'|trans }}</th>
