@@ -26,7 +26,6 @@ use Elabftw\Enums\State;
 use Elabftw\Exceptions\ResourceNotFoundException;
 use Elabftw\Interfaces\ControllerInterface;
 use Elabftw\Models\AbstractEntity;
-use Elabftw\Models\Changelog;
 use Elabftw\Models\Config;
 use Elabftw\Models\ExperimentsStatus;
 use Elabftw\Models\ExtraFieldsKeys;
@@ -291,10 +290,8 @@ abstract class AbstractEntityController implements ControllerInterface
         // check permissions
         $this->Entity->canOrExplode('read');
 
-        $Changelog = new Changelog($this->Entity);
-
         $renderArr = array(
-            'changes' => $Changelog->readAll(),
+            'changes' => $this->Entity->entityData['changelog'],
             'Entity' => $this->Entity,
         );
 
