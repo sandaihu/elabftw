@@ -7,7 +7,7 @@
  */
 import $ from 'jquery';
 import { ApiC } from './api';
-import { Malle, InputType, Action as MalleAction, SelectOptions } from '@deltablot/malle';
+import { Malle, InputType, SelectOptions } from '@deltablot/malle';
 import 'bootstrap/js/src/modal.js';
 import FavTag from './FavTag.class';
 import { clearLocalStorage, rememberLastSelected, selectLastSelected } from './localStorage';
@@ -34,6 +34,7 @@ import {
   TomSelect,
   updateEntityBody,
   updateCatStat,
+  makeMalleableColumnsGreatAgain,
 } from './misc';
 import i18next from './i18n';
 import { Metadata } from './Metadata.class';
@@ -72,6 +73,7 @@ interface Status extends SelectOptions {
   id: number;
   color: string;
   title: string;
+  is_current_team: number;
 }
 
 on('toggle-dark-mode', (el: HTMLElement) => {
@@ -236,36 +238,7 @@ if (isSafari() && !isDismissedSafari) {
 }
 // END SAFARI DETECTION
 
-// Listen for malleable columns
-new Malle({
-  onEdit: (original, _, input) => {
-    if (original.innerText === 'unset') {
-      input.value = '';
-      original.classList.remove('font-italic');
-    }
-    if (original.dataset.inputType === 'number') {
-      // use setAttribute here because type is readonly property
-      input.setAttribute('type', 'number');
-    }
-    return true;
-  },
-  cancel : i18next.t('cancel'),
-  cancelClasses: ['btn', 'btn-danger', 'mt-2', 'ml-1'],
-  inputClasses: ['form-control'],
-  fun: (value, original) => {
-    const params = {};
-    params[original.dataset.target] = value;
-    return ApiC.patch(`${original.dataset.endpoint}/${original.dataset.id}`, params)
-      .then(res => res.json())
-      .then(json => json[original.dataset.target]);
-  },
-  listenOn: '.malleableColumn',
-  returnedValueIsTrustedHtml: false,
-  submit : i18next.t('save'),
-  submitClasses: ['btn', 'btn-primary', 'mt-2'],
-  tooltip: i18next.t('click-to-edit'),
-}).listen();
-
+makeMalleableColumnsGreatAgain();
 
 // tom-select for team selection on login and register page, and idp selection
 ['init_team_select', 'team', 'team_selection_select', 'idp_login_select'].forEach(id =>{
@@ -278,37 +251,13 @@ new Malle({
       // we also remember the last selected one in localStorage
       onChange: rememberLastSelected(id),
       onInitialize: selectLastSelected(id),
+      // users get confused when their team doesn't show up (default is 50)
+      // so make it huge because otherwise one needs to explain that user needs to type to start filtering team names
+      // but users don't know how to type, only click and scroll, so it doesn't come to their mind.
+      maxOptions: 2222,
     });
   }
 });
-
-// MALLEABLE QTY_UNIT - we need a specific code to add the select options
-new Malle({
-  cancel : i18next.t('cancel'),
-  cancelClasses: ['btn', 'btn-danger', 'mt-2', 'ml-1'],
-  inputClasses: ['form-control'],
-  inputType: InputType.Select,
-  selectOptions: [
-    {selected: false, text: '•', value: '•'},
-    {selected: false, text: 'μL', value: 'μL'},
-    {selected: false, text: 'mL', value: 'mL'},
-    {selected: false, text: 'L', value: 'L'},
-    {selected: false, text: 'μg', value: 'μg'},
-    {selected: false, text: 'mg', value: 'mg'},
-    {selected: false, text: 'g', value: 'g'},
-    {selected: false, text: 'kg', value: 'kg'},
-  ],
-  fun: (value, original) => {
-    return ApiC.patch(`${original.dataset.endpoint}/${original.dataset.id}`, {qty_unit: value})
-      .then(res => res.json())
-      .then(json => json['qty_unit']);
-  },
-  listenOn: '.malleableQtyUnit',
-  returnedValueIsTrustedHtml: false,
-  submit : i18next.t('save'),
-  submitClasses: ['btn', 'btn-primary', 'mt-2'],
-  tooltip: i18next.t('click-to-edit'),
-}).listen();
 
 // only on entity page
 const pageMode = new URLSearchParams(document.location.search).get('mode');
@@ -342,12 +291,11 @@ if (entity.type !== EntityType.Other && (pageMode === 'view' || pageMode === 'ed
     },
     listenOn: '.malleable-title',
     returnedValueIsTrustedHtml: false,
-    onBlur: MalleAction.Submit,
     tooltip: i18next.t('click-to-edit'),
   }).listen();
 
   // CATEGORY AND STATUS
-  const notsetOpts = {id: null, title: i18next.t('not-set'), color: 'bdbdbd'};
+  const notsetOpts = {id: null, title: i18next.t('not-set'), color: 'bdbdbd', is_current_team: 1};
   let statusEndpoint = `${Model.Team}/current/items_status`;
   let categoryEndpoint = `${Model.Team}/current/resources_categories`;
   if (entity.type === EntityType.Experiment || entity.type === EntityType.Template) {
@@ -358,7 +306,7 @@ if (entity.type !== EntityType.Other && (pageMode === 'view' || pageMode === 'ed
   // this is a cache for category or status for malle
   const optionsCache = [];
   // this promise will fetch the categories or status on click
-  const getCatStatArr = (endpoint: string): Promise<SelectOptions[]> => {
+  const getCatStatArr = (endpoint: string): Promise<Status[]> => {
     if (!optionsCache[endpoint]) {
       optionsCache[endpoint] = ApiC.getJson(`${endpoint}?limit=9000`)
         .then(json => {
@@ -393,8 +341,6 @@ if (entity.type !== EntityType.Other && (pageMode === 'view' || pageMode === 'ed
       }
       return true;
     },
-    cancel : i18next.t('cancel'),
-    cancelClasses: ['btn', 'btn-danger', 'ml-1'],
     inputClasses: ['form-control', 'ml-2'],
     formClasses: ['form-inline'],
     fun: (value: string, original: HTMLElement) => updateCatStat(original.dataset.target, entity, value).then(color => {
@@ -404,11 +350,11 @@ if (entity.type !== EntityType.Other && (pageMode === 'view' || pageMode === 'ed
     inputType: InputType.Select,
     selectOptionsValueKey: 'id',
     selectOptionsTextKey: 'title',
-    selectOptions: () => getCatStatArr(statusEndpoint),
+    selectOptions: async () =>
+      ((await getCatStatArr(statusEndpoint)) as Status[])
+        .filter((status: Status) => status.is_current_team === 1),
     listenOn: '.malleableStatus',
     returnedValueIsTrustedHtml: false,
-    submit : i18next.t('save'),
-    submitClasses: ['btn', 'btn-primary', 'ml-1'],
     tooltip: i18next.t('click-to-edit'),
   }).listen();
 
@@ -422,19 +368,17 @@ if (entity.type !== EntityType.Other && (pageMode === 'view' || pageMode === 'ed
       elem.style.setProperty('--bg', `#${splitValue[1]}`);
       return true;
     },
-    cancel : i18next.t('cancel'),
-    cancelClasses: ['btn', 'btn-danger', 'mx-1'],
     inputClasses: ['form-control'],
     formClasses: ['form-inline'],
     fun: (value: string, original: HTMLElement) => updateCatStat(original.dataset.target, entity, value),
     inputType: InputType.Select,
     selectOptionsValueKey: 'id',
     selectOptionsTextKey: 'title',
-    selectOptions: () => getCatStatArr(categoryEndpoint),
+    selectOptions: async () =>
+      ((await getCatStatArr(categoryEndpoint)) as Status[])
+        .filter((cat: Status) => cat.is_current_team === 1),
     listenOn: '.malleableCategory',
     returnedValueIsTrustedHtml: false,
-    submit : i18next.t('save'),
-    submitClasses: ['btn', 'btn-primary', 'ml-1'],
     tooltip: i18next.t('click-to-edit'),
   }).listen();
 }
@@ -531,7 +475,11 @@ on('show-policy', (el: HTMLElement) => {
 
 on('reload-on-click', (el: HTMLElement) => reloadElements([el.dataset.target]));
 on('switch-editor', () => getEditor().switch(entity).then(() => window.location.reload()));
-on('destroy-favtags', (el: HTMLElement) => ApiC.delete(`${Model.FavTag}/${el.dataset.id}`).then(() => reloadElements(['favtagsTagsDiv'])));
+on('destroy-favtags', (el: HTMLElement) => {
+  if (confirm(i18next.t('generic-delete-warning'))) {
+    ApiC.delete(`${Model.FavTag}/${el.dataset.id}`).then(() => reloadElements(['favtagsTagsDiv']));
+  }
+});
 
 on('insert-param-and-reload', (el: HTMLElement) => {
   const params = new URLSearchParams(document.location.search.slice(1));
