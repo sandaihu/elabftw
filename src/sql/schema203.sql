@@ -1,4 +1,2 @@
 -- schema 203
-ALTER TABLE `items` ADD `book_price_notax` DECIMAL(10, 2) UNSIGNED NOT NULL DEFAULT 0.00;
-ALTER TABLE `items` ADD `book_price_tax` DECIMAL(10,2) UNSIGNED NOT NULL DEFAULT 0.00;
-ALTER TABLE `items` ADD `book_price_currency` TINYINT UNSIGNED NOT NULL DEFAULT 0;
+update items_types set canbook = canread, modified_at = modified_at where json_unquote(canbook) = 'null';
